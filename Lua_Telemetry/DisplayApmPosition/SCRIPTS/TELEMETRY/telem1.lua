@@ -28,7 +28,13 @@
 -- https://github.com/Clooney82/MavLink_FrSkySPort/tree/s-c-l-v-rc-opentx2.1/Lua_Telemetry/DisplayApmPosition
 --
 
+--require "bit"
+
 --Init Variables
+    local border = 3
+
+
+
 	local SumFlight = 0
 	local lastarmed = 0
 	local apmarmed = 0
@@ -80,10 +86,10 @@
 	local CenterYrowArrow = 41
 	local offsetX = 0
 	local offsetY = 0
-	local htsapaneloffset = 11
 	local divtmp = 1
 	local upppp = 20480
 	local divvv = 2048 --12 mal teilen
+	local power_ofs = 13
 
         -- gps
         local gpsLatLon = {}
@@ -173,14 +179,16 @@
 	local function drawWhGauge()
 
 	   whconsumed = watthours + ( watthours * ( model.getGlobalVariable(8, 1)/100) )
+	   whconsumed = 120
+	   maxconsume = 200
 	   if whconsumed >= maxconsume then
 	      whconsumed = maxconsume
 	   end
 
 	   --lcd.drawNumber(93,1,whconsumed,0+INVERS)
 
-	   lcd.drawFilledRectangle(74,9,11,55,INVERS)
-	   lcd.drawFilledRectangle(75,9,9, (whconsumed - 0)* ( 55 - 0 ) / (maxconsume - 0) + 0, 0)
+	   lcd.drawFilledRectangle(0,9,11,55,INVERS)
+	   lcd.drawFilledRectangle(1,9,9, (whconsumed - 0)* ( 55 - 0 ) / (maxconsume - 0) + 0, 0)
 	end
 
 
@@ -196,31 +204,34 @@
 -- GPS Panel
 	local function gpspanel()
 
-	  telem_t1 = getValue("T1") -- Temp1
+      tmp2 = getValue("Tmp2")
+	  telem_t1 = bit32.band(tmp2, 0xFFFF)
 	  telem_lock = 0
 	  telem_sats = 0
 	  telem_lock = telem_t1%10
-	  telem_sats = (telem_t1 - (telem_t1%10))/10
+	  telem_sats = (telem_t1 - telem_lock)/10
+
+      local line = 11
 
 	  if telem_lock >= 3 then
-	    lcd.drawText (168, 10, "3D",0)
-	    lcd.drawNumber (195, 10, telem_sats, 0+LEFT)
-	    lcd.drawText (lcd.getLastPos(), 10, "S", 0)
+	    lcd.drawText (167, line, "3D",SMLSIZE)
+	    lcd.drawNumber (198, line, telem_sats, SMLSIZE+LEFT)
+	    lcd.drawText (lcd.getLastPos(), line, "S", SMLSIZE)
 
 	  elseif telem_lock>1 then
-	    lcd.drawText (168, 10, "2D", 0)
-	    lcd.drawNumber (195, 10, telem_sats, 0+LEFT )
-	    lcd.drawText (lcd.getLastPos(), 10, "S", 0)
+	    lcd.drawText (167, line, "2D", SMLSIZE)
+	    lcd.drawNumber (198, line, telem_sats, SMLSIZE+LEFT )
+	    lcd.drawText (lcd.getLastPos(), line, "S", SMLSIZE)
 	  else
-	    lcd.drawText (168, 10, "NO", 0+BLINK+INVERS)
-	    lcd.drawText (195, 10, "--S",0)
+	    lcd.drawText (167, line, "NO", 0+BLINK+INVERS+SMLSIZE)
+	    lcd.drawText (198, line, "S",SMLSIZE)
 	  end
 
-	  hdop=round(getValue("A2"))/10
-	  if hdop <2.5 then
-	    lcd.drawNumber (180, 10, hdop, PREC1+LEFT+SMLSIZE )
+	  hdop = round(bit32.rshift(tmp2, 16))
+	  if hdop <250 then
+	    lcd.drawNumber (180, line, hdop, PREC2+LEFT+SMLSIZE )
 	  else
-	    lcd.drawNumber (180, 10, hdop, PREC1+LEFT+BLINK+INVERS+SMLSIZE)
+	    lcd.drawNumber (180, line, hdop, PREC2+LEFT+BLINK+INVERS+SMLSIZE)
 	  end
 
 	  -- pilot lat  52.027536, 8.513764
@@ -288,7 +299,10 @@
 	  --lcd.drawNumber(lcd.getLastPos(),57,headtoh,SMLSIZE + LEFT)
 
 	  lcd.drawText(187,37,"o",0)
-	  lcd.drawRectangle(167, 19, 45, 45)
+	  --lcd.drawRectangle(167, 19, 45, 45)
+      lcd.drawLine(165, 9, 165, 63, SOLID, FORCE)
+      lcd.drawLine(165, 19, 211, 19, SOLID, FORCE)
+	  
 	  for j=169, 209, 4 do
 	    lcd.drawPoint(j, 19+22)
 	  end
@@ -300,109 +314,153 @@
 	end
 
 
--- Altitude Panel
-	local function htsapanel()
+-- Alt/Att panel
+local function htsapanel(offset)
+	lcd.drawLine (offset-1, 9, offset-1, 63, SOLID, 0)
 
-	  --lcd.drawLine (htsapaneloffset + 74, 8, htsapaneloffset + 74, 63, SOLID, 0)
-	  lcd.drawLine (htsapaneloffset + 154, 8, htsapaneloffset + 154, 63, SOLID, 0)
-	  --heading
-	  lcd.drawText(htsapaneloffset + 76,11,"Heading ",SMLSIZE)
-	  lcd.drawNumber(lcd.getLastPos(),9,getValue("Hdg"),MIDSIZE+LEFT)
-	  lcd.drawText(lcd.getLastPos(),9,"\64",MIDSIZE)
+	--timer
+	local line = 12
+	lcd.drawTimer(offset+border,line,model.getTimer(0).value,MIDSIZE)
 
-	  --altitude
-	  --Alt max
-	  lcd.drawText(htsapaneloffset + 76,25,"Alt ",SMLSIZE)
-	  lcd.drawNumber(lcd.getLastPos()+3,22,getValue("Alt"),MIDSIZE+LEFT)
-	  lcd.drawText(lcd.getLastPos(),22,"m",MIDSIZE)
-	  --vspeed
-	  vspd= getValue("VSpd")
-	  if vspd == 0 then
-	    lcd.drawText(lcd.getLastPos(), 25,"==",0)
-	  elseif vspd >0 then
-	    lcd.drawText(lcd.getLastPos(), 25,"++",0)
-	  elseif vspd <0 then
-	    lcd.drawText(lcd.getLastPos(), 25,"-",0)
-	  end
-	  lcd.drawNumber(lcd.getLastPos(),25,vspd,0+LEFT)
+	--altitude
+	local alt = getValue("Alt")
+	lcd.drawNumber(offset+border+51,line,alt,MIDSIZE)
+	lcd.drawText(lcd.getLastPos(),line,"m", MIDSIZE)	
 
-	  lcd.drawText(htsapaneloffset + 76,35,"Max",SMLSIZE)
-	  lcd.drawNumber(lcd.getLastPos()+8,35,getValue("AltM"),SMLSIZE+LEFT)
-	  lcd.drawText(lcd.getLastPos(),35,"m",SMLSIZE)
+	local crs = getValue("Hdg")
+	local spd = getValue("GSpd")
+	local att = getValue("A3")*100
+	local roll = (bit32.rshift(att, 16)-18000)/100
+	local pitch = (bit32.band(att, 0xFFFF)-18000)/100
+	local lean = math.sqrt(roll*roll+pitch*pitch)
 
-	  --Armed time
-	  lcd.drawTimer(htsapaneloffset + 83,42,model.getTimer(0).value,MIDSIZE)
+	line = 30
+	lcd.drawText(offset+border,line,"GCrs", SMLSIZE)	
+	lcd.drawNumber(offset+border+44,line, crs*10, SMLSIZE+PREC1)	
+	lcd.drawText(lcd.getLastPos(),line,"\64", SMLSIZE)	
 
-          --Model Runtime
-          lcd.drawNumber(lcd.getLastPos()+8,45,model.getTimer(1).value/3600.0,SMLSIZE+LEFT+PREC1)
-          lcd.drawText(lcd.getLastPos()+3,45,"h",SMLSIZE)
+	line = line + 11
+	lcd.drawText(offset+border,line,"Lean", SMLSIZE)	
+	lcd.drawNumber(offset+border+44,line, lean*10, SMLSIZE+PREC1)	
+	lcd.drawText(lcd.getLastPos(),line,"\64", SMLSIZE)	
 
-	  lcd.drawText(htsapaneloffset + 76,56,"Speed",SMLSIZE)
-	  lcd.drawNumber(lcd.getLastPos()+8, 53,getValue("GSpd")*3.6,MIDSIZE+LEFT)
-
-	end
-
+	line = line + 11
+	lcd.drawText(offset+border,line,"GSpd", SMLSIZE)	
+	lcd.drawNumber(offset+border+44,line, spd*10, SMLSIZE+PREC1)	
+	lcd.drawText(lcd.getLastPos()+1,line,"m/s", SMLSIZE)	
+end
 
 -- Top Panel
-	local function toppanel()
+local function toppanel()
+	lcd.drawLine(0, 8, 211, 8, SOLID, FORCE)
 
-	  lcd.drawFilledRectangle(0, 0, 212, 9, 0)
-
-	  if apmarmed==1 then
-	    lcd.drawText(1, 0, (FlightMode[FmodeNr]), INVERS)
-	  else
-	    lcd.drawText(1, 0, (FlightMode[FmodeNr]), INVERS+BLINK)
-	  end
-
-	  lcd.drawText(134, 0, "TX:", INVERS)
-	  lcd.drawNumber(160, 0, getValue(189),0+PREC1+INVERS)
-	  lcd.drawText(lcd.getLastPos(), 0, "v", INVERS)
-
-	  lcd.drawText(172, 0, "rssi:", INVERS)
-	  lcd.drawNumber(lcd.getLastPos()+10, 0, getValue("RSSI"),0+INVERS)
+	if apmarmed==1 then
+	lcd.drawText(1, 1, (FlightMode[FmodeNr]), SMLSIZE)
+	else
+	lcd.drawText(1, 1, (FlightMode[FmodeNr]), SMLSIZE+BLINK)
 	end
+
+	local pos = 130
+	lcd.drawText(pos, 1, "RSSI:", SMLSIZE)
+	lcd.drawNumber(lcd.getLastPos()+14, 1, getValue("RSSI"),SMLSIZE)
+
+	pos = 174
+	lcd.drawText(pos, 1, "TX:", SMLSIZE)
+	lcd.drawNumber(lcd.getLastPos()+ 18, 1, getValue(189)*100, SMLSIZE+PREC2)
+	lcd.drawText(lcd.getLastPos()+1, 1, "V", SMLSIZE)
+end
+
+
+local cell_min = 99
+local cell_avg = 3.7
+local cell_max = 4.1
+
+local curr_min = 13.1
+local curr_avg = 33.1
+local curr_max = 83.1
+
+local powr_min = 123
+local powr_avg = 333
+local powr_max = 1223
+
+
+local alpha = 0.1
+local volt = 0
+local curr = 0
+local power = 0
+
+
+local function collect_data()
+    volt = getValue("VFAS")
+    curr = getValue("Curr")
+	powr = volt*curr
+
+	if volt>17 then
+		cell = volt/6
+	else
+		cell = volt/4
+	end
+
+	if cell<cell_min then cell_min = cell end
+	if cell>cell_max then cell_max = cell end
+	cell_avg = alpha*cell + (1-alpha)*cell_avg
+
+	if curr>curr_max then curr_max = curr end
+	if powr>powr_max then powr_max = powr end
+
+	if apmarmed then 
+		if curr<curr_min then curr_min = curr end
+		if powr<powr_min then powr_min = powr end
+
+		curr_avg = alpha*curr + (1-alpha)*curr_avg
+		powr_avg = alpha*powr + (1-alpha)*powr_avg
+	end
+end
+
 
 --Power Panel
+	local function powerpanel(offset)
+      -- large voltage display		
+	  lcd.drawNumber(offset+border+24,12,volt*10,MIDSIZE + PREC1)
+	  lcd.drawText(lcd.getLastPos(),12,"V",MIDSIZE)
 
-	local function powerpanel()
-	  --Used on power panel -- still to check if all needed
+      -- large power display		
+ 	  if powr < 1000 then
+		  lcd.drawNumber(offset+77,12,powr*10,MIDSIZE + PREC1)
+	  else 
+		  lcd.drawNumber(offset+77,12,powr,MIDSIZE)
+      end
+	  lcd.drawText(lcd.getLastPos(),12,"W",MIDSIZE)
 
-	  --tension=getValue("VFAS") --
-	  --current=getValue(Curr) ---
-	  consumption=getValue("mAh")---
-	  --watts=getValue("Watt") ---
-	  --tension_min=getValue(246) ---
-	  --current_max=getValue(247) ---
-	  --watts_max=getValue(248)  ---
-	  --cellmin=getValue("Cmin") --- 214 = cell-min
+	  -- details
 
-	  lcd.drawNumber(30,13,getValue("VFAS"),DBLSIZE+PREC1)
-	  lcd.drawText(lcd.getLastPos(),14,"V",0)
+	  line = 30
+	  lcd.drawText(offset+border,line,"Min", SMLSIZE)	
+	  lcd.drawNumber(offset+border+36,line, cell_min*100, SMLSIZE+PREC2)	
+	  lcd.drawText(lcd.getLastPos(),line,"V", SMLSIZE)	
+	  lcd.drawNumber(offset+border+54,line, curr_min, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"A", SMLSIZE)	
+	  lcd.drawNumber(offset+border+77,line, powr_min, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"W", SMLSIZE)	
 
-	  lcd.drawNumber(67,9,getValue("Curr"),MIDSIZE+PREC1)
-	  lcd.drawText(lcd.getLastPos(),10,"A",0)
-
-
-	  lcd.drawNumber(67,21,getValue("Watt"),MIDSIZE)
-	  lcd.drawText(lcd.getLastPos(),22,"W",0)
-
-	  lcd.drawNumber(1,33,consumption + ( consumption * ( model.getGlobalVariable(8, 0)/100 ) ),MIDSIZE+LEFT)
-	  xposCons=lcd.getLastPos()
-	  lcd.drawText(xposCons,32,"m",SMLSIZE)
-	  lcd.drawText(xposCons,38,"Ah",SMLSIZE)
-
-	  lcd.drawNumber(67,33,( watthours + ( watthours * ( model.getGlobalVariable(8, 1)/100) ) ) ,MIDSIZE+PREC1)
-	  xposCons=lcd.getLastPos()
-	  lcd.drawText(xposCons,32,"w",SMLSIZE)
-	  lcd.drawText(xposCons,38,"h",SMLSIZE)
-
-
-	  lcd.drawNumber(42,47,getValue("Cmin"),DBLSIZE+PREC2)
-	  xposCons=lcd.getLastPos()
-	  lcd.drawText(xposCons,48,"V",SMLSIZE)
-	  lcd.drawText(xposCons,56,"C-min",SMLSIZE)
+      line = line + 11
+	  lcd.drawText(offset+border,line,"Cur", SMLSIZE)	
+	  lcd.drawNumber(offset+border+36,line, cell*100, SMLSIZE+PREC2)	
+	  lcd.drawText(lcd.getLastPos(),line,"V", SMLSIZE)	
+	  lcd.drawNumber(offset+border+54,line, curr_avg, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"A", SMLSIZE)	
+	  lcd.drawNumber(offset+border+77,line, powr_avg, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"W", SMLSIZE)	
+	
+      line = line + 11
+	  lcd.drawText(offset+border,line,"Max", SMLSIZE)	
+	  lcd.drawNumber(offset+border+36,line, cell_max*100, SMLSIZE+PREC2)	
+	  lcd.drawText(lcd.getLastPos(),line,"V", SMLSIZE)	
+	  lcd.drawNumber(offset+border+54,line, curr_max, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"A", SMLSIZE)	
+	  lcd.drawNumber(offset+border+77,line, powr_max, SMLSIZE)	
+	  lcd.drawText(lcd.getLastPos(),line,"W", SMLSIZE)	
 	end
-
 
 	-- Calculate watthours
 	local function calcWattHs()
@@ -420,20 +478,18 @@
 --APM Armed and errors
 	local function armed_status()
 
-	  t2 = getValue("T2")
-	  apmarmed = t2%0x02
 
-          -- opentx2.1.3 lua support for latitude and longitude
-          -- added on opentx commit c0dee366c0ae3f9776b3ba305cc3eb6bdeec593a
-          gpsLatLon = getValue("GPS")
-          if (type(gpsLatLon) == "table") then
-              if gpsLatLon["lat"] ~= NIL then
-                LocationLat = gpsLatLon["lat"]
-              end
-              if gpsLatLon["lon"] ~= NIL then
-                LocationLon = gpsLatLon["lon"]
-              end
+      -- opentx2.1.3 lua support for latitude and longitude
+      -- added on opentx commit c0dee366c0ae3f9776b3ba305cc3eb6bdeec593a
+      gpsLatLon = getValue("GPS")
+      if (type(gpsLatLon) == "table") then
+          if gpsLatLon["lat"] ~= NIL then
+            LocationLat = gpsLatLon["lat"]
           end
+          if gpsLatLon["lon"] ~= NIL then
+            LocationLon = gpsLatLon["lon"]
+          end
+      end
 
 	  if apmarmed ~=1 then -- report last heading bevor arming. this can used for display position relative to copter
 	    prearmheading=getValue("Hdg")
@@ -494,14 +550,21 @@
 
 --FlightModes
 	local function Flight_modes()
-          FmodeNr = getValue("Fuel")+1
+	  tmp1 = getValue("Tmp1")
+      apmarmed = bit32.rshift(tmp1, 8)
+      FmodeNr = bit32.band(tmp1, 0xff) + 1
+
 	  if FmodeNr<1 or FmodeNr>18 then
 	    FmodeNr=13
 	  end
 
+	  --lcd.drawText(100, 0, FmodeNr, 0)
+
 	  if FmodeNr~=last_flight_mode then
 	    playFile("/SOUNDS/en/TELEM/AVFM"..(FmodeNr-1).."A.wav")
 	    last_flight_mode=FmodeNr
+		curr_min = curr
+ 		powr_min = powr
 	  end
 	end
 
@@ -524,38 +587,26 @@
           --lcd.clear()
         end
 
+
 --Background
 	local function background()
-
+      collect_data()
 	  armed_status()
-
 	  Flight_modes()
-
 	  calcWattHs()
-
 	  playMaxWhReached()
-
 	end
 
 --Main
 	local function run(event)
-
-          lcd.clear()
-
+      lcd.clear()
 	  background()
-
 	  toppanel()
-
-	  powerpanel()
-
-	  htsapanel()
-
+	  powerpanel(12)
+	  htsapanel(101)
 	  gpspanel()
-
 	  drawArrow()
-
 	  drawWhGauge()
-
 	end
 
 	return {init=init, run=run, background=background}
